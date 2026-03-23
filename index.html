@@ -360,6 +360,24 @@
     .s-item.total .s-hours { color: white; }
     .s-unit { font-size: 0.68rem; color: #94a3b8; margin-top: 0.15rem; }
 
+    .lunch-note {
+      max-width: 980px;
+      margin: 0.75rem auto 0;
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: right;
+      padding: 0 0.25rem;
+    }
+    .lunch-note span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.25rem 0.65rem;
+    }
+
     @media (max-width: 600px) {
       .cards-grid { grid-template-columns: 1fr; }
       .settings-bar { flex-wrap: wrap; justify-content: center; }
@@ -404,6 +422,9 @@
 <div class="summary" id="summary">
   <div class="summary-heading" id="summary-heading">Monthly Summary</div>
   <div class="summary-grid" id="summary-grid"></div>
+</div>
+<div class="lunch-note">
+  <span>&#x1F371; 1 hour lunch break is already deducted from all shift totals</span>
 </div>
 
 <script>
@@ -489,7 +510,7 @@ function addHours(t, h) {
 function shiftHours(start, end) {
   let diff = toMins(end) - toMins(start);
   if (diff <= 0) diff += 1440;
-  return diff / 60;
+  return diff / 60 - 1; // minus 1h lunch break
 }
 
 function fmt(h) {
@@ -641,7 +662,7 @@ function renderCard(emp, group) {
     <div class="divider"></div>
 
     <div class="calc-row">
-      <span class="calc-label">Hours per shift</span>
+      <span class="calc-label">Hours per shift <span style="font-weight:400;opacity:0.7">(−1h lunch)</span></span>
       <span class="calc-value" id="hps-${emp.id}">${fmt(hps)} h</span>
     </div>
     <div class="calc-row">
