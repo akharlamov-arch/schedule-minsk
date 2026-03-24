@@ -874,7 +874,7 @@ function renderCard(emp, group) {
       <span class="salary-label">💵 Salary / hour</span>
       <input class="salary-input" id="sph-${emp.id}" type="number" min="0" step="0.01"
              placeholder="—"
-             value="${emp.salaryPerHour != null ? emp.salaryPerHour : ''}"
+             value="${emp.salaryPerHour != null ? Number(emp.salaryPerHour.toFixed(2)) : ''}"
              oninput="onSalaryHourInput('${group.id}',${emp.id},this.value)" />
       <span class="salary-currency">$</span>
     </div>
@@ -882,7 +882,7 @@ function renderCard(emp, group) {
       <span class="salary-label">📅 Salary / month</span>
       <input class="salary-input" id="spm-${emp.id}" type="number" min="0" step="1"
              placeholder="—"
-             value="${emp.salaryPerHour != null ? fmt(emp.salaryPerHour * hpm) : ''}"
+             value="${emp.salaryPerHour != null ? Number((emp.salaryPerHour * hpm).toFixed(2)) : ''}"
              oninput="onSalaryMonthInput('${group.id}',${emp.id},this.value,'${group.id}')" />
       <span class="salary-currency">$</span>
     </div>
@@ -974,7 +974,7 @@ function updateSalaryDisplay(emp, hpm) {
       spmEl.value = hpm > 0 ? Number((emp.salaryPerHour * hpm).toFixed(2)) : "";
     }
     if (document.activeElement !== sphEl) {
-      sphEl.value = emp.salaryPerHour;
+      sphEl.value = Number(emp.salaryPerHour.toFixed(2));
     }
   }
 }
@@ -984,7 +984,7 @@ function onSalaryHourInput(groupId, empId, raw) {
   const emp = g && g.employees.find(e => e.id === empId);
   if (!emp) return;
   const val = raw === "" ? null : parseFloat(raw);
-  emp.salaryPerHour = (val == null || isNaN(val)) ? null : val;
+  emp.salaryPerHour = (val == null || isNaN(val)) ? null : Math.round(val * 100) / 100;
   saveState();
   const hpm = shiftHours(emp.caStart, emp.caEnd) * getDaysForEmp(emp, g);
   const spmEl = document.getElementById(`spm-${emp.id}`);
