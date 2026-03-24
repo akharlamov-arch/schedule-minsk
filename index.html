@@ -350,6 +350,34 @@
     .calc-label { font-size: 0.78rem; color: #3b82f6; font-weight: 500; }
     .calc-value { font-size: 1rem; font-weight: 700; color: var(--calc-fg); }
 
+    /* ── Salary rows ── */
+    .salary-divider { height: 1px; background: var(--border); margin: 0.85rem 0; }
+    .salary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1.5px solid var(--border);
+      border-radius: 9px;
+      padding: 0.35rem 0.75rem;
+      margin-bottom: 0.45rem;
+      background: #fff;
+      gap: 0.5rem;
+    }
+    .salary-row:last-child { margin-bottom: 0; }
+    .salary-label { font-size: 0.78rem; color: var(--muted); font-weight: 500; white-space: nowrap; }
+    .salary-input {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      border: none;
+      outline: none;
+      text-align: right;
+      width: 90px;
+      background: transparent;
+    }
+    .salary-input::placeholder { color: #cbd5e1; font-weight: 400; }
+    .salary-currency { font-size: 0.82rem; color: var(--muted); flex-shrink: 0; }
+
     /* ── Summary ── */
     .summary {
       max-width: 980px;
@@ -702,6 +730,7 @@ function selectTimeFromPopup(value) {
   const hpmEl = document.getElementById(`hpm-${emp.id}`);
   if (hpsEl) hpsEl.textContent = fmt(hps)        + " h";
   if (hpmEl) hpmEl.textContent = fmt(hps * days) + " h";
+  updateSalaryDisplay(emp, hps * days);
   renderSummary();
   closeTimePopup();
 }
@@ -838,6 +867,25 @@ function renderCard(emp, group) {
       <span class="calc-label">Hours per month</span>
       <span class="calc-value" id="hpm-${emp.id}">${fmt(hpm)} h</span>
     </div>
+
+    <div class="salary-divider"></div>
+
+    <div class="salary-row">
+      <span class="salary-label">💵 Salary / hour</span>
+      <input class="salary-input" id="sph-${emp.id}" type="number" min="0" step="0.01"
+             placeholder="—"
+             value="${emp.salaryPerHour != null ? emp.salaryPerHour : ''}"
+             oninput="onSalaryHourInput('${group.id}',${emp.id},this.value)" />
+      <span class="salary-currency">$</span>
+    </div>
+    <div class="salary-row">
+      <span class="salary-label">📅 Salary / month</span>
+      <input class="salary-input" id="spm-${emp.id}" type="number" min="0" step="1"
+             placeholder="—"
+             value="${emp.salaryPerHour != null ? fmt(emp.salaryPerHour * hpm) : ''}"
+             oninput="onSalaryMonthInput('${group.id}',${emp.id},this.value,'${group.id}')" />
+      <span class="salary-currency">$</span>
+    </div>
   </div>`;
 }
 
@@ -907,9 +955,58 @@ function refreshAllCalcFields() {
         const badge = document.getElementById(`edays-count-${emp.id}`);
         if (badge) badge.textContent = `${days} days`;
       }
+      updateSalaryDisplay(emp, hps * days);
     });
   });
   renderSummary();
+}
+
+// ── Salary ────────────────────────────────────────────────────────────────────
+
+function updateSalaryDisplay(emp, hpm) {
+  const sphEl = document.getElementById(`sph-${emp.id}`);
+  const spmEl = document.getElementById(`spm-${emp.id}`);
+  if (!sphEl || !spmEl) return;
+  if (emp.salaryPerHour != null) {
+    // Don't overwrite the field the user is currently typing in.
+    // Only refresh the derived field.
+    if (document.activeElement !== spmEl) {
+      spmEl.value = hpm > 0 ? Number((emp.salaryPerHour * hpm).toFixed(2)) : "";
+    }
+    if (document.activeElement !== sphEl) {
+      sphEl.value = emp.salaryPerHour;
+    }
+  }
+}
+
+function onSalaryHourInput(groupId, empId, raw) {
+  const g   = state.groups.find(g => g.id === groupId);
+  const emp = g && g.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const val = raw === "" ? null : parseFloat(raw);
+  emp.salaryPerHour = (val == null || isNaN(val)) ? null : val;
+  saveState();
+  const hpm = shiftHours(emp.caStart, emp.caEnd) * getDaysForEmp(emp, g);
+  const spmEl = document.getElementById(`spm-${emp.id}`);
+  if (spmEl) spmEl.value = emp.salaryPerHour != null && hpm > 0
+    ? Number((emp.salaryPerHour * hpm).toFixed(2)) : "";
+}
+
+function onSalaryMonthInput(groupId, empId, raw) {
+  const g   = state.groups.find(g => g.id === groupId);
+  const emp = g && g.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const monthly = raw === "" ? null : parseFloat(raw);
+  const hpm = shiftHours(emp.caStart, emp.caEnd) * getDaysForEmp(emp, g);
+  if (monthly == null || isNaN(monthly) || hpm <= 0) {
+    emp.salaryPerHour = null;
+  } else {
+    emp.salaryPerHour = monthly / hpm;
+  }
+  saveState();
+  const sphEl = document.getElementById(`sph-${emp.id}`);
+  if (sphEl) sphEl.value = emp.salaryPerHour != null
+    ? Number(emp.salaryPerHour.toFixed(2)) : "";
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────────────
@@ -963,6 +1060,7 @@ function updateEmp(groupId, empId, field, value) {
   const hpmEl = document.getElementById(`hpm-${emp.id}`);
   if (hpsEl) hpsEl.textContent = fmt(hps)       + " h";
   if (hpmEl) hpmEl.textContent = fmt(hps * days) + " h";
+  updateSalaryDisplay(emp, hps * days);
   renderSummary();
 }
 
