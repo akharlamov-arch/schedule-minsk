@@ -227,7 +227,7 @@
     .name-input:focus { border-bottom-color: var(--wd-color); }
     .weekend .name-input:focus { border-bottom-color: var(--we-color); }
 
-    .shift-input {
+    .shift-badge {
       font-size: 0.72rem;
       font-weight: 600;
       border: 1.5px solid var(--border);
@@ -235,10 +235,9 @@
       padding: 0.18rem 0.65rem;
       background: #f8fafc;
       color: var(--muted);
-      outline: none;
       display: inline-block;
       margin-bottom: 1rem;
-      max-width: 100%;
+      user-select: none;
     }
 
     .field-row {
@@ -584,6 +583,12 @@ function shiftHours(start, end) {
   return diff / 60 - 1; // minus 1h lunch break
 }
 
+function shiftLabel(minskStartTime) {
+  const mins = toMins(minskStartTime);
+  // 360 = 06:00, 1080 = 18:00
+  return (mins >= 360 && mins < 1080) ? "\u2600\uFE0F Day Shift" : "\uD83C\uDF19 Night Shift";
+}
+
 function fmt(h) {
   return Number.isInteger(h) ? h.toString() : h.toFixed(1);
 }
@@ -802,8 +807,7 @@ function renderCard(emp, group) {
              onchange="updateEmp('${group.id}',${emp.id},'name',this.value)" />
     </div>
 
-    <input class="shift-input" type="text" value="${esc(emp.shift)}"
-           onchange="updateEmp('${group.id}',${emp.id},'shift',this.value)" />
+    <span class="shift-badge" id="shift-${emp.id}">${shiftLabel(ms.time)}</span>
 
     ${empDaysRow}
     <div class="field-row">
@@ -879,8 +883,9 @@ function updateMinskTime(emp) {
   const ms = addHours(emp.caStart, offset);
   const me = addHours(emp.caEnd,   offset);
   const el = document.getElementById(`ms-${emp.id}`);
-  if (el) el.innerHTML =
-    `${ms.time} &#8211; ${me.time}`;
+  if (el) el.innerHTML = `${ms.time} &#8211; ${me.time}`;
+  const shiftEl = document.getElementById(`shift-${emp.id}`);
+  if (shiftEl) shiftEl.textContent = shiftLabel(ms.time);
 }
 
 // Called when month/year changes — no DOM rebuild needed
