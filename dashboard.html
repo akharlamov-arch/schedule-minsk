@@ -262,40 +262,38 @@
     }
     .time-sep { font-size: 0.78rem; color: var(--muted); margin: 0 2px; }
 
-    .time-pick {
+    .time-chip {
       display: inline-flex;
       align-items: center;
-      gap: 1px;
       background: white;
       border: 1.5px solid var(--border);
       border-radius: 8px;
-      padding: 0.26rem 0.5rem;
-      transition: border-color 0.18s;
-    }
-    .time-pick:focus-within { border-color: var(--wd-color); }
-    .weekend .time-pick:focus-within { border-color: var(--we-color); }
-    .time-pick select {
-      border: none;
-      background: transparent;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text);
-      outline: none;
-      cursor: pointer;
-      padding: 0;
-      -webkit-appearance: none;
-      appearance: none;
-      text-align: center;
-    }
-    .time-pick .tp-h { width: 26px; }
-    .time-pick .tp-m { width: 22px; }
-    .time-pick .tp-colon {
-      font-size: 0.85rem;
+      padding: 0.28rem 0.65rem;
+      font-size: 0.88rem;
       font-weight: 700;
       color: var(--text);
-      line-height: 1;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.15s;
+      letter-spacing: 0.02em;
+      min-width: 54px;
+      justify-content: center;
       user-select: none;
-      margin: 0 1px;
+    }
+    .time-chip:hover { border-color: var(--wd-color); background: #f0f9ff; }
+    .weekend .time-chip:hover { border-color: var(--we-color); background: #fff7ed; }
+    .time-chip.editing { padding: 0; border-color: var(--wd-color); background: white; }
+    .weekend .time-chip.editing { border-color: var(--we-color); }
+    .time-chip input {
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text);
+      width: 54px;
+      text-align: center;
+      padding: 0.28rem 0.5rem;
+      letter-spacing: 0.02em;
     }
 
     .minsk-time {
@@ -541,35 +539,44 @@ function daysForGroup(group) {
 }
 
 function renderTimePick(value, groupId, empId, field) {
-  const parts = (value || "00:00").split(":").map(Number);
-  const hh = parts[0] || 0;
-  const mm = parts[1] || 0;
-  let hOpts = "";
-  for (let i = 0; i < 24; i++) {
-    const v = String(i).padStart(2, "0");
-    hOpts += `<option value="${i}"${i === hh ? " selected" : ""}>${v}</option>`;
-  }
-  let mOpts = "";
-  [0, 15, 30, 45].forEach(m => {
-    const v = String(m).padStart(2, "0");
-    mOpts += `<option value="${m}"${m === mm ? " selected" : ""}>${v}</option>`;
-  });
-  return `<div class="time-pick">
-    <select class="tp-h" onchange="updateTimePart('${groupId}',${empId},'${field}','h',+this.value)">${hOpts}</select>
-    <span class="tp-colon">:</span>
-    <select class="tp-m" onchange="updateTimePart('${groupId}',${empId},'${field}','m',+this.value)">${mOpts}</select>
-  </div>`;
+  const v = value || "00:00";
+  return `<span class="time-chip" id="tc-${empId}-${field}"
+    onclick="activateTimeChip('${groupId}',${empId},'${field}')">${v}</span>`;
 }
 
-function updateTimePart(groupId, empId, field, part, val) {
+function activateTimeChip(groupId, empId, field) {
+  const chip = document.getElementById(`tc-${empId}-${field}`);
+  if (!chip || chip.classList.contains("editing")) return;
+  const cur = chip.textContent.trim();
+  chip.classList.add("editing");
+  chip.innerHTML = `<input type="text" maxlength="5" value="${cur}" placeholder="HH:MM"
+    onkeydown="timeChipKey(event,'${groupId}',${empId},'${field}')"
+    onblur="commitTimeChip('${groupId}',${empId},'${field}',this.value)" />`;
+  const inp = chip.querySelector("input");
+  inp.focus();
+  inp.select();
+}
+
+function commitTimeChip(groupId, empId, field, raw) {
+  const chip = document.getElementById(`tc-${empId}-${field}`);
   const g = state.groups.find(g => g.id === groupId);
-  if (!g) return;
+  if (!g || !chip) return;
   const emp = g.employees.find(e => e.id === empId);
   if (!emp) return;
-  const [curH, curM] = (emp[field] || "00:00").split(":").map(Number);
-  const newH = part === "h" ? val : curH;
-  const newM = part === "m" ? val : curM;
-  emp[field] = String(newH).padStart(2, "0") + ":" + String(newM).padStart(2, "0");
+
+  let val = raw.trim().replace(/[^\d:]/g, "");
+  if (/^\d{3,4}$/.test(val)) val = val.slice(0, -2) + ":" + val.slice(-2);
+  const m = val.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) {
+    const h   = Math.min(23, parseInt(m[1], 10));
+    const raw_m = parseInt(m[2], 10);
+    const min = [0, 15, 30, 45].reduce((a, b) =>
+      Math.abs(b - raw_m) < Math.abs(a - raw_m) ? b : a);
+    emp[field] = String(h).padStart(2, "0") + ":" + String(min).padStart(2, "0");
+  }
+
+  chip.classList.remove("editing");
+  chip.textContent = emp[field];
   saveState();
   updateMinskTime(emp);
   const hps  = shiftHours(emp.caStart, emp.caEnd);
@@ -579,6 +586,16 @@ function updateTimePart(groupId, empId, field, part, val) {
   if (hpsEl) hpsEl.textContent = fmt(hps)        + " h";
   if (hpmEl) hpmEl.textContent = fmt(hps * days) + " h";
   renderSummary();
+}
+
+function timeChipKey(e, groupId, empId, field) {
+  if (e.key === "Enter")  { e.preventDefault(); e.target.blur(); }
+  if (e.key === "Escape") {
+    const chip = document.getElementById(`tc-${empId}-${field}`);
+    const g    = state.groups.find(g => g.id === groupId);
+    const emp  = g && g.employees.find(e => e.id === empId);
+    if (chip && emp) { chip.classList.remove("editing"); chip.textContent = emp[field]; }
+  }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
