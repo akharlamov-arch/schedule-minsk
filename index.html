@@ -8,6 +8,7 @@
     :root {
       --wd-color: #0ea5e9;
       --we-color: #f97316;
+      --cu-color: #8b5cf6;
       --bg: #f1f5f9;
       --card: #ffffff;
       --text: #1e293b;
@@ -400,6 +401,34 @@
       padding: 0.25rem 0.65rem;
     }
 
+    /* ── Custom group theme ── */
+    .custom .group-dot  { background: var(--cu-color); }
+    .custom .card       { border-top-color: var(--cu-color); }
+    .custom .avatar     { background: var(--cu-color); }
+    .custom .name-input:focus  { border-bottom-color: var(--cu-color); }
+    .custom .time-chip:hover   { border-color: var(--cu-color); background: #f5f3ff; }
+    .custom .time-chip.open    { border-color: var(--cu-color); background: #f5f3ff; }
+    .custom .day-toggle.active { border-color: var(--cu-color); background: var(--cu-color); color: white; }
+    .custom .group-header .add-emp-btn:hover { border-color: var(--cu-color); color: var(--cu-color); }
+
+    /* ── Per-employee days row (custom group cards) ── */
+    .emp-days-row {
+      display: flex; gap: 0.22rem; flex-wrap: wrap; align-items: center;
+      margin-bottom: 0.8rem;
+    }
+
+    /* ── Custom group empty state ── */
+    .custom-empty {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 2rem 1rem;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      margin-bottom: 1.1rem;
+    }
+
     @media (max-width: 600px) {
       .cards-grid { grid-template-columns: 1fr; }
       .settings-bar { flex-wrap: wrap; justify-content: center; }
@@ -484,6 +513,12 @@ const defaultData = {
         { id: 3, name: "Vladimir", shift: "Day Shift",   caStart: "06:00", caEnd: "14:00" },
         { id: 4, name: "Gleb",     shift: "Night Shift", caStart: "14:00", caEnd: "22:00" }
       ]
+    },
+    {
+      id: "custom",
+      title: "Custom Schedules",
+      type: "custom",
+      employees: []
     }
   ],
   nextId: 5
@@ -498,9 +533,20 @@ function loadState() {
     const saved = localStorage.getItem("minsk_schedule_v2");
     if (saved) {
       const parsed = JSON.parse(saved);
+      if (!parsed.groups.find(g => g.id === "custom")) {
+        parsed.groups.push({ id: "custom", title: "Custom Schedules", type: "custom", employees: [] });
+      }
       (parsed.groups || []).forEach(g => {
-        if (!g.workDayMask) g.workDayMask = (g.id === "weekend") ? [5,6,0] : [1,2,3,4];
-        (g.employees || []).forEach(e => { delete e.daysPerMonth; delete e.days; });
+        if (g.id === "custom") {
+          g.type = "custom";
+          (g.employees || []).forEach(e => {
+            if (!e.workDayMask) e.workDayMask = [1, 2, 3, 4, 5];
+            delete e.daysPerMonth; delete e.days;
+          });
+        } else {
+          if (!g.workDayMask) g.workDayMask = (g.id === "weekend") ? [5,6,0] : [1,2,3,4];
+          (g.employees || []).forEach(e => { delete e.daysPerMonth; delete e.days; });
+        }
       });
       if (!parsed.selectedYear)  parsed.selectedYear  = new Date().getFullYear();
       if (!parsed.selectedMonth) parsed.selectedMonth = new Date().getMonth() + 1;
@@ -563,6 +609,11 @@ function initial(name) {
 
 function daysForGroup(group) {
   return countDaysInMonth(state.selectedYear, state.selectedMonth, group.workDayMask);
+}
+
+function getDaysForEmp(emp, group) {
+  const mask = group.type === "custom" ? (emp.workDayMask || []) : group.workDayMask;
+  return countDaysInMonth(state.selectedYear, state.selectedMonth, mask);
 }
 
 function renderTimePick(value, groupId, empId, field) {
@@ -641,7 +692,7 @@ function selectTimeFromPopup(value) {
   saveState();
   updateMinskTime(emp);
   const hps  = shiftHours(emp.caStart, emp.caEnd);
-  const days = daysForGroup(g);
+  const days = getDaysForEmp(emp, g);
   const hpsEl = document.getElementById(`hps-${emp.id}`);
   const hpmEl = document.getElementById(`hpm-${emp.id}`);
   if (hpsEl) hpsEl.textContent = fmt(hps)        + " h";
@@ -678,19 +729,27 @@ function render() {
 }
 
 function renderGroup(group) {
-  const isWE = group.id === "weekend";
-  const cls  = isWE ? "weekend" : "weekday";
-  const days = daysForGroup(group);
+  const isCustom = group.type === "custom";
+  const cls = isCustom ? "custom" : (group.id === "weekend" ? "weekend" : "weekday");
   const cards = group.employees.map(emp => renderCard(emp, group)).join("");
 
-  const dayToggles = DAYS_LABEL.map((label, idx) => {
-    const active = group.workDayMask.includes(idx) ? "active" : "";
-    return `<button class="day-toggle ${active}" onclick="toggleWorkDay('${group.id}',${idx})">${label}</button>`;
-  }).join("");
-
-  return `
-  <div class="group ${cls}" id="group-${group.id}">
-    <div class="group-header">
+  let headerInner;
+  if (isCustom) {
+    headerInner = `
+      <div class="group-dot"></div>
+      <div class="group-title-wrap">
+        <input class="group-title-input" type="text" value="${esc(group.title)}"
+               onchange="updateGroup('${group.id}','title',this.value)" />
+        <div class="days-row" style="color:var(--muted);font-size:0.75rem;">Individual schedules per employee</div>
+      </div>
+      <button class="add-emp-btn" onclick="addEmployee('${group.id}')">+ Add employee</button>`;
+  } else {
+    const days = daysForGroup(group);
+    const dayToggles = DAYS_LABEL.map((label, idx) => {
+      const active = group.workDayMask.includes(idx) ? "active" : "";
+      return `<button class="day-toggle ${active}" onclick="toggleWorkDay('${group.id}',${idx})">${label}</button>`;
+    }).join("");
+    headerInner = `
       <div class="group-dot"></div>
       <div class="group-title-wrap">
         <input class="group-title-input" type="text" value="${esc(group.title)}"
@@ -700,19 +759,37 @@ function renderGroup(group) {
           <span class="wdays-badge" id="wdays-count-${group.id}">${days} days</span>
         </div>
       </div>
-      <button class="add-emp-btn" onclick="addEmployee('${group.id}')">+ Add employee</button>
+      <button class="add-emp-btn" onclick="addEmployee('${group.id}')">+ Add employee</button>`;
+  }
+
+  const emptyState = isCustom && group.employees.length === 0
+    ? `<div class="custom-empty">No employees yet — click <strong>+ Add employee</strong> to create a custom schedule</div>`
+    : "";
+
+  return `
+  <div class="group ${cls}" id="group-${group.id}">
+    <div class="group-header">${headerInner}
     </div>
-    <div class="cards-grid">${cards}</div>
+    ${emptyState}<div class="cards-grid">${cards}</div>
   </div>`;
 }
 
 function renderCard(emp, group) {
   const offset = getOffset();
   const hps  = shiftHours(emp.caStart, emp.caEnd);
-  const days = daysForGroup(group);
+  const days = getDaysForEmp(emp, group);
   const hpm  = hps * days;
   const ms   = addHours(emp.caStart, offset);
   const me   = addHours(emp.caEnd,   offset);
+
+  let empDaysRow = "";
+  if (group.type === "custom") {
+    const toggles = DAYS_LABEL.map((label, idx) => {
+      const active = (emp.workDayMask || []).includes(idx) ? "active" : "";
+      return `<button class="day-toggle ${active}" onclick="toggleEmpWorkDay('${group.id}',${emp.id},${idx})">${label}</button>`;
+    }).join("");
+    empDaysRow = `<div class="emp-days-row">${toggles}<span class="wdays-badge" id="edays-count-${emp.id}">${days} days</span></div>`;
+  }
 
   return `
   <div class="card" id="card-${emp.id}">
@@ -728,8 +805,37 @@ function renderCard(emp, group) {
     <input class="shift-input" type="text" value="${esc(emp.shift)}"
            onchange="updateEmp('${group.id}',${emp.id},'shift',this.value)" />
 
+    ${empDaysRow}
     <div class="field-row">
       <span class="field-label">California time</span>
+      <div class="field-right">
+        ${renderTimePick(emp.caStart, group.id, emp.id, 'caStart')}
+        <span class="time-sep">&#8211;</span>
+        ${renderTimePick(emp.caEnd, group.id, emp.id, 'caEnd')}
+      </div>
+    </div>
+
+    <div class="field-row">
+      <span class="field-label">Minsk time</span>
+      <div class="field-right">
+        <span class="minsk-time" id="ms-${emp.id}">
+          ${ms.time} &#8211; ${me.time}
+        </span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="calc-row">
+      <span class="calc-label">Hours per shift <span style="font-weight:400;opacity:0.7">(−1h lunch)</span></span>
+      <span class="calc-value" id="hps-${emp.id}">${fmt(hps)} h</span>
+    </div>
+    <div class="calc-row">
+      <span class="calc-label">Hours per month</span>
+      <span class="calc-value" id="hpm-${emp.id}">${fmt(hpm)} h</span>
+    </div>
+  </div>`;
+}
       <div class="field-right">
         ${renderTimePick(emp.caStart, group.id, emp.id, 'caStart')}
         <span class="time-sep">&#8211;</span>
@@ -768,8 +874,8 @@ function renderSummary() {
   let total = 0;
   let html = "";
   state.groups.forEach(group => {
-    const days = daysForGroup(group);
     group.employees.forEach(emp => {
+      const days = getDaysForEmp(emp, group);
       const h = shiftHours(emp.caStart, emp.caEnd) * days;
       total += h;
       html += `
@@ -808,15 +914,22 @@ function updateMinskTime(emp) {
 // Called when month/year changes — no DOM rebuild needed
 function refreshAllCalcFields() {
   state.groups.forEach(group => {
-    const days  = daysForGroup(group);
-    const badge = document.getElementById(`wdays-count-${group.id}`);
-    if (badge) badge.textContent = `${days} days`;
+    if (group.type !== "custom") {
+      const days  = daysForGroup(group);
+      const badge = document.getElementById(`wdays-count-${group.id}`);
+      if (badge) badge.textContent = `${days} days`;
+    }
     group.employees.forEach(emp => {
-      const hps  = shiftHours(emp.caStart, emp.caEnd);
+      const days  = getDaysForEmp(emp, group);
+      const hps   = shiftHours(emp.caStart, emp.caEnd);
       const hpsEl = document.getElementById(`hps-${emp.id}`);
       const hpmEl = document.getElementById(`hpm-${emp.id}`);
-      if (hpsEl) hpsEl.textContent = fmt(hps)       + " h";
-      if (hpmEl) hpmEl.textContent = fmt(hps * days) + " h";
+      if (hpsEl) hpsEl.textContent = fmt(hps)        + " h";
+      if (hpmEl) hpmEl.textContent = fmt(hps * days)  + " h";
+      if (group.type === "custom") {
+        const badge = document.getElementById(`edays-count-${emp.id}`);
+        if (badge) badge.textContent = `${days} days`;
+      }
     });
   });
   renderSummary();
@@ -843,6 +956,22 @@ function toggleWorkDay(groupId, dayIndex) {
   render(); // full re-render to update toggle button states
 }
 
+function toggleEmpWorkDay(groupId, empId, dayIndex) {
+  const g = state.groups.find(g => g.id === groupId);
+  if (!g) return;
+  const emp = g.employees.find(e => e.id === empId);
+  if (!emp) return;
+  if (!emp.workDayMask) emp.workDayMask = [];
+  const pos = emp.workDayMask.indexOf(dayIndex);
+  if (pos >= 0) {
+    emp.workDayMask.splice(pos, 1);
+  } else {
+    emp.workDayMask.push(dayIndex);
+  }
+  saveState();
+  render();
+}
+
 function updateEmp(groupId, empId, field, value) {
   const g = state.groups.find(g => g.id === groupId);
   if (!g) return;
@@ -852,7 +981,7 @@ function updateEmp(groupId, empId, field, value) {
   saveState();
   updateMinskTime(emp);
   const hps   = shiftHours(emp.caStart, emp.caEnd);
-  const days  = daysForGroup(g);
+  const days  = getDaysForEmp(emp, g);
   const hpsEl = document.getElementById(`hps-${emp.id}`);
   const hpmEl = document.getElementById(`hpm-${emp.id}`);
   if (hpsEl) hpsEl.textContent = fmt(hps)       + " h";
@@ -863,13 +992,15 @@ function updateEmp(groupId, empId, field, value) {
 function addEmployee(groupId) {
   const g = state.groups.find(g => g.id === groupId);
   if (!g) return;
-  g.employees.push({
+  const emp = {
     id: state.nextId++,
     name: "New Employee",
     shift: "Day Shift",
     caStart: "06:00",
     caEnd: "14:00"
-  });
+  };
+  if (g.type === "custom") emp.workDayMask = [1, 2, 3, 4, 5];
+  g.employees.push(emp);
   saveState();
   render();
 }
@@ -877,7 +1008,7 @@ function addEmployee(groupId) {
 function deleteEmployee(groupId, empId) {
   const g = state.groups.find(g => g.id === groupId);
   if (!g) return;
-  if (g.employees.length <= 1) {
+  if (g.type !== "custom" && g.employees.length <= 1) {
     alert("At least one employee per group is required.");
     return;
   }
