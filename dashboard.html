@@ -834,35 +834,6 @@ function renderCard(emp, group) {
       <span class="calc-label">Hours per month</span>
       <span class="calc-value" id="hpm-${emp.id}">${fmt(hpm)} h</span>
     </div>
-  </div>`;
-}
-      <div class="field-right">
-        ${renderTimePick(emp.caStart, group.id, emp.id, 'caStart')}
-        <span class="time-sep">&#8211;</span>
-        ${renderTimePick(emp.caEnd, group.id, emp.id, 'caEnd')}
-      </div>
-    </div>
-
-    <div class="field-row">
-      <span class="field-label">Minsk time</span>
-      <div class="field-right">
-        <span class="minsk-time" id="ms-${emp.id}">
-          ${ms.time} &#8211; ${me.time}
-        </span>
-      </div>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="calc-row">
-      <span class="calc-label">Hours per shift <span style="font-weight:400;opacity:0.7">(−1h lunch)</span></span>
-      <span class="calc-value" id="hps-${emp.id}">${fmt(hps)} h</span>
-    </div>
-    <div class="calc-row">
-      <span class="calc-label">Hours per month</span>
-      <span class="calc-value" id="hpm-${emp.id}">${fmt(hpm)} h</span>
-    </div>
-  </div>`;
 }
 
 function renderSummary() {
