@@ -260,7 +260,7 @@
       gap: 0.3rem;
       flex-shrink: 0;
     }
-    .time-sep { font-size: 0.78rem; color: var(--muted); margin: 0 2px; }
+    .time-sep { font-size: 0.78rem; color: var(--muted); margin: 0 4px; }
 
     .time-chip {
       display: inline-flex;
@@ -268,32 +268,56 @@
       background: white;
       border: 1.5px solid var(--border);
       border-radius: 8px;
-      padding: 0.28rem 0.65rem;
+      padding: 0.3rem 0.7rem;
       font-size: 0.88rem;
       font-weight: 700;
       color: var(--text);
       cursor: pointer;
       transition: border-color 0.18s, background 0.15s;
       letter-spacing: 0.02em;
-      min-width: 54px;
+      min-width: 58px;
       justify-content: center;
       user-select: none;
+      position: relative;
     }
     .time-chip:hover { border-color: var(--wd-color); background: #f0f9ff; }
     .weekend .time-chip:hover { border-color: var(--we-color); background: #fff7ed; }
-    .time-chip.editing { padding: 0; border-color: var(--wd-color); background: white; }
-    .weekend .time-chip.editing { border-color: var(--we-color); }
-    .time-chip input {
-      border: none;
-      outline: none;
-      background: transparent;
-      font-size: 0.88rem;
-      font-weight: 700;
+    .time-chip.open { border-color: var(--wd-color); background: #f0f9ff; }
+    .weekend .time-chip.open { border-color: var(--we-color); background: #fff7ed; }
+
+    /* ── Time Popup ── */
+    #time-popup {
+      position: fixed;
+      z-index: 9999;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08);
+      width: 140px;
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+      overscroll-behavior: contain;
+    }
+    #time-popup.visible { display: block; }
+    #time-popup::-webkit-scrollbar { width: 4px; }
+    #time-popup::-webkit-scrollbar-track { background: transparent; }
+    #time-popup::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .tp-item {
+      padding: 0.6rem 1.1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
       color: var(--text);
-      width: 54px;
-      text-align: center;
-      padding: 0.28rem 0.5rem;
+      cursor: pointer;
+      transition: background 0.1s;
       letter-spacing: 0.02em;
+    }
+    .tp-item:hover { background: #f1f5f9; }
+    .tp-item.selected {
+      background: var(--wd-color);
+      color: white;
+      border-radius: 6px;
+      margin: 0 4px;
+      padding-left: calc(1.1rem - 4px);
     }
 
     .minsk-time {
@@ -425,6 +449,9 @@
   <span>&#x1F371; 1 hour lunch break is already deducted from all shift totals</span>
 </div>
 
+<!-- Time popup (shared, repositioned on open) -->
+<div id="time-popup"></div>
+
 <script>
 "use strict";
 
@@ -541,42 +568,76 @@ function daysForGroup(group) {
 function renderTimePick(value, groupId, empId, field) {
   const v = value || "00:00";
   return `<span class="time-chip" id="tc-${empId}-${field}"
-    onclick="activateTimeChip('${groupId}',${empId},'${field}')">${v}</span>`;
+    onclick="openTimePopup(event,'${groupId}',${empId},'${field}')">${v}</span>`;
 }
 
-function activateTimeChip(groupId, empId, field) {
-  const chip = document.getElementById(`tc-${empId}-${field}`);
-  if (!chip || chip.classList.contains("editing")) return;
-  const cur = chip.textContent.trim();
-  chip.classList.add("editing");
-  chip.innerHTML = `<input type="text" maxlength="5" value="${cur}" placeholder="HH:MM"
-    onkeydown="timeChipKey(event,'${groupId}',${empId},'${field}')"
-    onblur="commitTimeChip('${groupId}',${empId},'${field}',this.value)" />`;
-  const inp = chip.querySelector("input");
-  inp.focus();
-  inp.select();
+// ── Time Popup ────────────────────────────────────────────────────────────────
+
+let _popupMeta = null; // { groupId, empId, field }
+
+function buildTimeOptions() {
+  const opts = [];
+  for (let h = 0; h < 24; h++) {
+    for (const m of [0, 30]) {
+      opts.push(String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0"));
+    }
+  }
+  return opts;
 }
 
-function commitTimeChip(groupId, empId, field, raw) {
+function openTimePopup(event, groupId, empId, field) {
+  event.stopPropagation();
   const chip = document.getElementById(`tc-${empId}-${field}`);
-  const g = state.groups.find(g => g.id === groupId);
-  if (!g || !chip) return;
-  const emp = g.employees.find(e => e.id === empId);
-  if (!emp) return;
+  const popup = document.getElementById("time-popup");
+  if (!chip || !popup) return;
 
-  let val = raw.trim().replace(/[^\d:]/g, "");
-  if (/^\d{3,4}$/.test(val)) val = val.slice(0, -2) + ":" + val.slice(-2);
-  const m = val.match(/^(\d{1,2}):(\d{2})$/);
-  if (m) {
-    const h   = Math.min(23, parseInt(m[1], 10));
-    const raw_m = parseInt(m[2], 10);
-    const min = [0, 15, 30, 45].reduce((a, b) =>
-      Math.abs(b - raw_m) < Math.abs(a - raw_m) ? b : a);
-    emp[field] = String(h).padStart(2, "0") + ":" + String(min).padStart(2, "0");
+  // close if already open for same chip
+  if (_popupMeta && _popupMeta.empId === empId && _popupMeta.field === field) {
+    closeTimePopup();
+    return;
   }
 
-  chip.classList.remove("editing");
-  chip.textContent = emp[field];
+  closeTimePopup();
+  _popupMeta = { groupId, empId, field };
+  chip.classList.add("open");
+
+  const current = chip.textContent.trim();
+  const options = buildTimeOptions();
+
+  popup.innerHTML = options.map(t => {
+    const sel = t === current ? " selected" : "";
+    return `<div class="tp-item${sel}" onclick="selectTimeFromPopup('${t}')">${t}</div>`;
+  }).join("");
+
+  popup.classList.add("visible");
+
+  // position below chip
+  const rect = chip.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom;
+  if (spaceBelow < 230) {
+    popup.style.top  = (rect.top + window.scrollY - 220) + "px";
+  } else {
+    popup.style.top  = (rect.bottom + window.scrollY + 4) + "px";
+  }
+  popup.style.left = rect.left + "px";
+
+  // scroll selected into view
+  const selEl = popup.querySelector(".selected");
+  if (selEl) {
+    popup.scrollTop = selEl.offsetTop - popup.clientHeight / 2 + selEl.clientHeight / 2;
+  }
+}
+
+function selectTimeFromPopup(value) {
+  if (!_popupMeta) return;
+  const { groupId, empId, field } = _popupMeta;
+  const g   = state.groups.find(g => g.id === groupId);
+  const emp = g && g.employees.find(e => e.id === empId);
+  const chip = document.getElementById(`tc-${empId}-${field}`);
+  if (!emp || !chip) { closeTimePopup(); return; }
+
+  emp[field] = value;
+  chip.textContent = value;
   saveState();
   updateMinskTime(emp);
   const hps  = shiftHours(emp.caStart, emp.caEnd);
@@ -586,17 +647,26 @@ function commitTimeChip(groupId, empId, field, raw) {
   if (hpsEl) hpsEl.textContent = fmt(hps)        + " h";
   if (hpmEl) hpmEl.textContent = fmt(hps * days) + " h";
   renderSummary();
+  closeTimePopup();
 }
 
-function timeChipKey(e, groupId, empId, field) {
-  if (e.key === "Enter")  { e.preventDefault(); e.target.blur(); }
-  if (e.key === "Escape") {
-    const chip = document.getElementById(`tc-${empId}-${field}`);
-    const g    = state.groups.find(g => g.id === groupId);
-    const emp  = g && g.employees.find(e => e.id === empId);
-    if (chip && emp) { chip.classList.remove("editing"); chip.textContent = emp[field]; }
+function closeTimePopup() {
+  const popup = document.getElementById("time-popup");
+  if (!popup) return;
+  popup.classList.remove("visible");
+  popup.innerHTML = "";
+  if (_popupMeta) {
+    const chip = document.getElementById(`tc-${_popupMeta.empId}-${_popupMeta.field}`);
+    if (chip) chip.classList.remove("open");
   }
+  _popupMeta = null;
 }
+
+document.addEventListener("click", function(e) {
+  if (_popupMeta && !document.getElementById("time-popup").contains(e.target)) {
+    closeTimePopup();
+  }
+});
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
