@@ -699,15 +699,22 @@ function openTimePopup(event, groupId, empId, field) {
 
   popup.classList.add("visible");
 
-  // position below chip
+  // position relative to chip — popup is position:fixed so no scrollY needed
   const rect = chip.getBoundingClientRect();
+  const popupH = 220;
+  const popupW = 140;
   const spaceBelow = window.innerHeight - rect.bottom;
-  if (spaceBelow < 230) {
-    popup.style.top  = (rect.top + window.scrollY - 220) + "px";
-  } else {
-    popup.style.top  = (rect.bottom + window.scrollY + 4) + "px";
-  }
-  popup.style.left = rect.left + "px";
+  const spaceAbove = rect.top;
+
+  const top = spaceBelow >= popupH || spaceBelow >= spaceAbove
+    ? rect.bottom + 4
+    : rect.top - popupH - 4;
+
+  // keep within horizontal viewport
+  const left = Math.min(rect.left, window.innerWidth - popupW - 8);
+
+  popup.style.top  = top  + "px";
+  popup.style.left = left + "px";
 
   // scroll selected into view
   const selEl = popup.querySelector(".selected");
