@@ -568,11 +568,15 @@ function loadState() {
           g.type = "custom";
           (g.employees || []).forEach(e => {
             if (!e.workDayMask) e.workDayMask = [1, 2, 3, 4, 5];
+            if (e.salaryPerHour != null) e.salaryPerHour = Math.round(e.salaryPerHour * 100) / 100;
             delete e.daysPerMonth; delete e.days;
           });
         } else {
           if (!g.workDayMask) g.workDayMask = (g.id === "weekend") ? [5,6,0] : [1,2,3,4];
-          (g.employees || []).forEach(e => { delete e.daysPerMonth; delete e.days; });
+          (g.employees || []).forEach(e => {
+            if (e.salaryPerHour != null) e.salaryPerHour = Math.round(e.salaryPerHour * 100) / 100;
+            delete e.daysPerMonth; delete e.days;
+          });
         }
       });
       if (!parsed.selectedYear)  parsed.selectedYear  = new Date().getFullYear();
@@ -1001,7 +1005,7 @@ function onSalaryMonthInput(groupId, empId, raw) {
   if (monthly == null || isNaN(monthly) || hpm <= 0) {
     emp.salaryPerHour = null;
   } else {
-    emp.salaryPerHour = monthly / hpm;
+    emp.salaryPerHour = Math.round((monthly / hpm) * 100) / 100;
   }
   saveState();
   const sphEl = document.getElementById(`sph-${emp.id}`);
